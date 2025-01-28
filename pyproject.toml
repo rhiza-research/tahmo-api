@@ -1,0 +1,10 @@
+name = "tahmo-api"
+version = "2.0.0"
+description = "A Python library for interacting with the TAHMO API"
+
+dependencies = [
+	"numpy",
+	"pandas",
+	"python-dateutil",
+	"requests",
+]
