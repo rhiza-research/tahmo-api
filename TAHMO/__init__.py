@@ -20,7 +20,7 @@ class apiWrapper(object):
         self.apiKey = key
         self.apiSecret = secret
 
-    def getMeasurements(self, station, startDate=None, endDate=None, variables=None, dataset='controlled'):
+    def getMeasurements(self, station, startDate=None, endDate=None, variables=None, dataset='controlled', manualMemoryCleanup=False):
         #print('Get measurements', station, startDate, endDate, variables)
         endpoint = 'services/measurements/v2/stations/%s/measurements/%s' % (station, dataset)
 
@@ -100,22 +100,24 @@ class apiWrapper(object):
                     del serie
             else:
                 values = list(map(lambda x: x[1], seriesHolder[shortcode]))
-                serie = pd.Series(values, index=pd.DatetimeIndex(timestamps))
-
                 if len(values) > 0:
                     serie = pd.Series(values, index=pd.DatetimeIndex(timestamps))
                     series.append(serie.to_frame(shortcode))
 
+                    # Clean up scope.
+                    del serie
+
                 # Clean up scope.
                 del values
-                del serie
 
             # Clean up memory.
-            gc.collect()
+            if manualMemoryCleanup:
+                gc.collect()
 
         # Clean up.
         del seriesHolder
-        gc.collect()
+        if manualMemoryCleanup:
+            gc.collect()
 
         # Merge all series together.
         if len(series) > 0:
@@ -125,12 +127,13 @@ class apiWrapper(object):
 
         # Clean up memory.
         del series
-        gc.collect()
+        if manualMemoryCleanup:
+            gc.collect()
 
         return df
 
-    def getRawMeasurements(self, station, startDate=None, endDate=None, variables=None):
-        return self.getMeasurements(station, startDate=startDate, endDate=endDate, variables=variables, dataset='raw')
+    def getRawMeasurements(self, station, startDate=None, endDate=None, variables=None, manualMemoryCleanup=False):
+        return self.getMeasurements(station, startDate=startDate, endDate=endDate, variables=variables, dataset='raw', manualMemoryCleanup=manualMemoryCleanup)
 
     def getStations(self):
         response = self.__request('services/assets/v2/stations', {'sort': 'code'})
@@ -181,7 +184,7 @@ class apiWrapper(object):
 
         # Set start and end date to their provided values.
         df.loc[0, 'start'] = pd.Timestamp(startDate)
-        df['end'].iloc[-1] = pd.Timestamp(endDate)
+        df.loc[df.index[[-1]], 'end'] = pd.Timestamp(endDate)
         return df
 
     def __handleApiError(self, apiRequest):
