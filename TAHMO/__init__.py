@@ -208,6 +208,16 @@ class apiWrapper(object):
                 variables[element["variable"]["shortcode"]] = element["variable"]
         return variables
 
+    def getSensorFromCode(self, sensorCode):
+        response = self.__request("services/assets/v2/sensors", {"filter": "code!eq!" + sensorCode})
+        data = response["data"]
+        assert len(data) == 1, "Zero or multiple sensors matched filter"
+        sensorId = data[0]["sensor"]["id"]
+        return self.getSensorFromId(sensorId)
+
+    def getSensorFromId(self, sensorId):
+        return self.__request("services/assets/v2/sensors/" + str(sensorId), {})["data"]["sensor"]
+
     def __request(self, endpoint, params):
         print("API request: %s" % endpoint)
         apiRequest = requests.get(
