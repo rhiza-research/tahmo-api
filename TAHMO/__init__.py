@@ -3,6 +3,7 @@ import time
 import dateutil.parser
 import datetime
 import gc
+import warnings
 
 import requests
 import numpy as np
@@ -47,8 +48,13 @@ class apiWrapper(object):
 
             year_dfs.append(pd.DataFrame(serie["values"], columns=serie["columns"]))
 
-        df = pd.concat(year_dfs, axis=0, sort=True)
-        return df
+        if year_dfs:
+            df = pd.concat(year_dfs, axis=0, sort=True)
+            return df
+        else:
+            warnings.Warn("No data found.")
+            return None
+
 
     def getMeasurements(
         self, station, startDate=None, endDate=None, variables=None, dataset="controlled", manualMemoryCleanup=False
