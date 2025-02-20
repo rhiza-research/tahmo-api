@@ -52,7 +52,7 @@ class apiWrapper(object):
             df = pd.concat(year_dfs, axis=0, sort=True)
             return df
         else:
-            warnings.Warn("No data found.")
+            warnings.warn("No data found.")
             return None
 
 
