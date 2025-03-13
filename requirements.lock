@@ -10,3 +10,27 @@
 #   universal: false
 
 -e file:.
+certifi==2025.1.31
+    # via requests
+charset-normalizer==3.4.1
+    # via requests
+idna==3.10
+    # via requests
+numpy==2.2.3
+    # via pandas
+    # via tahmo
+pandas==2.2.3
+    # via tahmo
+python-dateutil==2.9.0.post0
+    # via pandas
+    # via tahmo
+pytz==2025.1
+    # via pandas
+requests==2.32.3
+    # via tahmo
+six==1.17.0
+    # via python-dateutil
+tzdata==2025.1
+    # via pandas
+urllib3==2.3.0
+    # via requests
