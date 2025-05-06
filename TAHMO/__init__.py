@@ -3,6 +3,7 @@ import time
 import dateutil.parser
 import datetime
 import gc
+import warnings
 
 import requests
 import numpy as np
@@ -20,7 +21,41 @@ class apiWrapper(object):
         self.apiKey = key
         self.apiSecret = secret
 
-    def getMeasurements(self, station, startDate=None, endDate=None, variables=None, dataset='controlled'):
+    def getRawData(self, station, startDate=None, endDate=None, variables=None, dataset="raw"):
+        endpoint = "services/measurements/v2/stations/%s/measurements/%s" % (station, dataset)
+
+        dateSplit = self.__splitDateRange(startDate, endDate)
+
+        year_dfs = []
+
+        for index, row in dateSplit.iterrows():
+            params = {
+                "start": row["start"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "end": row["end"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }
+            if variables and isinstance(variables, list) and len(variables) == 1:
+                params["variable"] = variables[0]
+            response = self.__request(endpoint, params)
+            assert "results" in response and len(response["results"]) == 1
+
+            if "series" not in response["results"][0]:
+                # No data for this time period
+                continue
+
+            assert len(response["results"][0]["series"]) == 1 and "values" in response["results"][0]["series"][0]
+            serie = response["results"][0]["series"][0]
+
+            year_dfs.append(pd.DataFrame(serie["values"], columns=serie["columns"]))
+
+        if year_dfs:
+            df = pd.concat(year_dfs, axis=0, sort=True)
+            return df
+        else:
+            warnings.warn("No data found.")
+            return None
+
+
+    def getMeasurements(self, station, startDate=None, endDate=None, variables=None, dataset='controlled', manualMemoryCleanup=False):
         #print('Get measurements', station, startDate, endDate, variables)
         endpoint = 'services/measurements/v2/stations/%s/measurements/%s' % (station, dataset)
 
@@ -76,7 +111,8 @@ class apiWrapper(object):
 
                 # Clean up scope and free memory.
                 del response
-                gc.collect()
+                if manualMemoryCleanup:
+                    gc.collect()
 
         for shortcode in seriesHolder:
             # Check if there are duplicate entries in this timeseries (multiple sensors for same variable).
@@ -100,22 +136,24 @@ class apiWrapper(object):
                     del serie
             else:
                 values = list(map(lambda x: x[1], seriesHolder[shortcode]))
-                serie = pd.Series(values, index=pd.DatetimeIndex(timestamps))
-
                 if len(values) > 0:
                     serie = pd.Series(values, index=pd.DatetimeIndex(timestamps))
                     series.append(serie.to_frame(shortcode))
 
+                    # Clean up scope.
+                    del serie
+
                 # Clean up scope.
                 del values
-                del serie
 
             # Clean up memory.
-            gc.collect()
+            if manualMemoryCleanup:
+                gc.collect()
 
         # Clean up.
         del seriesHolder
-        gc.collect()
+        if manualMemoryCleanup:
+            gc.collect()
 
         # Merge all series together.
         if len(series) > 0:
@@ -125,12 +163,13 @@ class apiWrapper(object):
 
         # Clean up memory.
         del series
-        gc.collect()
+        if manualMemoryCleanup:
+            gc.collect()
 
         return df
 
-    def getRawMeasurements(self, station, startDate=None, endDate=None, variables=None):
-        return self.getMeasurements(station, startDate=startDate, endDate=endDate, variables=variables, dataset='raw')
+    def getRawMeasurements(self, station, startDate=None, endDate=None, variables=None, manualMemoryCleanup=False):
+        return self.getMeasurements(station, startDate=startDate, endDate=endDate, variables=variables, dataset='raw', manualMemoryCleanup=manualMemoryCleanup)
 
     def getStations(self):
         response = self.__request('services/assets/v2/stations', {'sort': 'code'})
@@ -147,6 +186,16 @@ class apiWrapper(object):
             for element in response['data']:
                 variables[element['variable']['shortcode']] = element['variable']
         return variables
+
+    def getSensorFromCode(self, sensorCode):
+        response = self.__request("services/assets/v2/sensors", {"filter": "code!eq!" + sensorCode})
+        data = response["data"]
+        assert len(data) == 1, "Zero or multiple sensors matched filter"
+        sensorId = data[0]["sensor"]["id"]
+        return self.getSensorFromId(sensorId)
+
+    def getSensorFromId(self, sensorId):
+        return self.__request("services/assets/v2/sensors/" + str(sensorId), {})["data"]["sensor"]
 
     def __request(self, endpoint, params):
         print('API request: %s' % endpoint)
@@ -181,7 +230,7 @@ class apiWrapper(object):
 
         # Set start and end date to their provided values.
         df.loc[0, 'start'] = pd.Timestamp(startDate)
-        df['end'].iloc[-1] = pd.Timestamp(endDate)
+        df.loc[df.index[[-1]], 'end'] = pd.Timestamp(endDate)
         return df
 
     def __handleApiError(self, apiRequest):
