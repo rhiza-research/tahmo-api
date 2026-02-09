@@ -13,6 +13,7 @@ import pandas as pd
 API_BASE_URL = 'https://datahub.tahmo.org'
 API_MAX_PERIOD = '365D'
 
+
 class apiWrapper(object):
     apiKey = ''
     apiSecret = ''
@@ -22,7 +23,8 @@ class apiWrapper(object):
         self.apiSecret = secret
 
     def getRawData(self, station, startDate=None, endDate=None, variables=None, dataset="raw"):
-        endpoint = "services/measurements/v2/stations/%s/measurements/%s" % (station, dataset)
+        endpoint = "services/measurements/v2/stations/%s/measurements/%s" % (
+            station, dataset)
 
         dateSplit = self.__splitDateRange(startDate, endDate)
 
@@ -35,17 +37,25 @@ class apiWrapper(object):
             }
             if variables and isinstance(variables, list) and len(variables) == 1:
                 params["variable"] = variables[0]
-            response = self.__request(endpoint, params)
+            try:
+                response = self.__request(endpoint, params)
+            except Exception as e:
+                # If the request fails, skip this time period.
+                print(
+                    f"Request failed for {params['start']} to {params['end']} on {endpoint}: {e}")
+                continue
             assert "results" in response and len(response["results"]) == 1
 
             if "series" not in response["results"][0]:
                 # No data for this time period
                 continue
 
-            assert len(response["results"][0]["series"]) == 1 and "values" in response["results"][0]["series"][0]
+            assert len(response["results"][0]["series"]
+                       ) == 1 and "values" in response["results"][0]["series"][0]
             serie = response["results"][0]["series"][0]
 
-            year_dfs.append(pd.DataFrame(serie["values"], columns=serie["columns"]))
+            year_dfs.append(pd.DataFrame(
+                serie["values"], columns=serie["columns"]))
 
         if year_dfs:
             df = pd.concat(year_dfs, axis=0, sort=True)
@@ -54,22 +64,23 @@ class apiWrapper(object):
             warnings.warn("No data found.")
             return None
 
-
     def getMeasurements(self, station, startDate=None, endDate=None, variables=None, dataset='controlled', manualMemoryCleanup=False):
-        #print('Get measurements', station, startDate, endDate, variables)
-        endpoint = 'services/measurements/v2/stations/%s/measurements/%s' % (station, dataset)
+        # print('Get measurements', station, startDate, endDate, variables)
+        endpoint = 'services/measurements/v2/stations/%s/measurements/%s' % (
+            station, dataset)
 
         dateSplit = self.__splitDateRange(startDate, endDate)
         series = []
         seriesHolder = {}
 
         for index, row in dateSplit.iterrows():
-            params = {'start': row['start'].strftime('%Y-%m-%dT%H:%M:%SZ'), 'end': row['end'].strftime('%Y-%m-%dT%H:%M:%SZ')}
+            params = {'start': row['start'].strftime(
+                '%Y-%m-%dT%H:%M:%SZ'), 'end': row['end'].strftime('%Y-%m-%dT%H:%M:%SZ')}
             if variables and isinstance(variables, list) and len(variables) == 1:
                 params['variable'] = variables[0]
             response = self.__request(endpoint, params)
             if 'results' in response and len(response['results']) >= 1 and 'series' in response['results'][0] and len(
-                response['results'][0]['series']) >= 1 and 'values' in response['results'][0]['series'][0]:
+                    response['results'][0]['series']) >= 1 and 'values' in response['results'][0]['series'][0]:
 
                 for result in response['results']:
                     if 'series' in result and len(result['series']) >= 1 and 'values' in result['series'][0]:
@@ -86,7 +97,8 @@ class apiWrapper(object):
 
                             # Create list of unique variables within the retrieved observations.
                             if not isinstance(variables, list) or len(variables) == 0:
-                                shortcodes = list(set(list(map(lambda x: x[variable_index], observations))))
+                                shortcodes = list(
+                                    set(list(map(lambda x: x[variable_index], observations))))
                             else:
                                 shortcodes = variables
 
@@ -121,13 +133,18 @@ class apiWrapper(object):
             if len(timestamps) > len(set(timestamps)):
                 # Split observations per sensor.
                 print('Split observations for %s per sensor' % shortcode)
-                sensors = list(set(list(map(lambda x: x[2], seriesHolder[shortcode]))))
+                sensors = list(
+                    set(list(map(lambda x: x[2], seriesHolder[shortcode]))))
                 for sensor in sensors:
-                    sensorSerie = list(filter(lambda x: x[2] == sensor, seriesHolder[shortcode]))
-                    timestamps = list(map(lambda x: pd.Timestamp(x[0]), sensorSerie))
+                    sensorSerie = list(
+                        filter(lambda x: x[2] == sensor, seriesHolder[shortcode]))
+                    timestamps = list(
+                        map(lambda x: pd.Timestamp(x[0]), sensorSerie))
                     values = list(map(lambda x: x[1], sensorSerie))
-                    serie = pd.Series(values, index=pd.DatetimeIndex(timestamps))
-                    series.append(serie.to_frame('%s_%s' % (shortcode, sensor)))
+                    serie = pd.Series(
+                        values, index=pd.DatetimeIndex(timestamps))
+                    series.append(serie.to_frame('%s_%s' %
+                                  (shortcode, sensor)))
 
                     # Clean up scope.
                     del sensorSerie
@@ -137,7 +154,8 @@ class apiWrapper(object):
             else:
                 values = list(map(lambda x: x[1], seriesHolder[shortcode]))
                 if len(values) > 0:
-                    serie = pd.Series(values, index=pd.DatetimeIndex(timestamps))
+                    serie = pd.Series(
+                        values, index=pd.DatetimeIndex(timestamps))
                     series.append(serie.to_frame(shortcode))
 
                     # Clean up scope.
@@ -172,7 +190,8 @@ class apiWrapper(object):
         return self.getMeasurements(station, startDate=startDate, endDate=endDate, variables=variables, dataset='raw', manualMemoryCleanup=manualMemoryCleanup)
 
     def getStations(self):
-        response = self.__request('services/assets/v2/stations', {'sort': 'code'})
+        response = self.__request(
+            'services/assets/v2/stations', {'sort': 'code'})
         stations = {}
         if 'data' in response and isinstance(response['data'], list):
             for element in response['data']:
@@ -184,11 +203,13 @@ class apiWrapper(object):
         variables = {}
         if 'data' in response and isinstance(response['data'], list):
             for element in response['data']:
-                variables[element['variable']['shortcode']] = element['variable']
+                variables[element['variable']
+                          ['shortcode']] = element['variable']
         return variables
 
     def getSensorFromCode(self, sensorCode):
-        response = self.__request("services/assets/v2/sensors", {"filter": "code!eq!" + sensorCode})
+        response = self.__request(
+            "services/assets/v2/sensors", {"filter": "code!eq!" + sensorCode})
         data = response["data"]
         assert len(data) == 1, "Zero or multiple sensors matched filter"
         sensorId = data[0]["sensor"]["id"]
@@ -198,7 +219,11 @@ class apiWrapper(object):
         return self.__request("services/assets/v2/sensors/" + str(sensorId), {})["data"]["sensor"]
 
     def __request(self, endpoint, params):
-        print('API request: %s' % endpoint)
+        if 'start' in params and 'end' in params:
+            print(
+                f'API request from {params['start']} to {params['end']} on {endpoint}')
+        else:
+            print(f'API request on {endpoint}')
         apiRequest = requests.get(
             '%s/%s' % (API_BASE_URL, endpoint),
             params=params,
@@ -222,7 +247,8 @@ class apiWrapper(object):
             raise ValueError("Invalid data parameters")
 
         # Split date range into intervals of 365 days.
-        dates = pd.date_range(start=startDate.strftime("%Y%m%d"), end=endDate.strftime("%Y%m%d"), freq=API_MAX_PERIOD)
+        dates = pd.date_range(start=startDate.strftime(
+            "%Y%m%d"), end=endDate.strftime("%Y%m%d"), freq=API_MAX_PERIOD)
 
         df = pd.DataFrame([[i, x] for i, x in
                            zip(dates, dates.shift(1) - datetime.timedelta(seconds=1))],
@@ -243,4 +269,5 @@ class apiWrapper(object):
                 print(json)
                 raise Exception(json['error']['message'])
             else:
-                raise Exception('API request failed with status code %s' % apiRequest.status_code)
+                raise Exception(
+                    'API request failed with status code %s' % apiRequest.status_code)
